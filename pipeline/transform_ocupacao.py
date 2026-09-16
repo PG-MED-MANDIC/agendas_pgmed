@@ -103,11 +103,14 @@ def _find_header_row(sheet_df: pd.DataFrame) -> int | None:
     return None
 
 
-def build_raw(xlsx_path: Path, warnings: list[str] | None = None) -> list[list]:
+def build_raw(xlsx_path: Path, warnings: list[str] | None = None, attendance=None) -> list[list]:
     """Lê todas as abas que começam com "Ocupação" e devolve a lista de
     linhas no formato de RAW. `warnings` (opcional) recebe uma mensagem por
     aba pulada ou problema encontrado, pra quem chamar decidir como
-    reportar."""
+    reportar. `attendance` (opcional, ver attendance_consultaja.Attendance)
+    substitui o valor de "Agendamentos" pelo número real de pacientes que
+    compareceram, cruzado com a base da ConsultaJá por turma+data -- se
+    None, mantém o valor da própria coluna "Agendamentos" da checklist."""
     if warnings is None:
         warnings = []
 
@@ -117,8 +120,9 @@ def build_raw(xlsx_path: Path, warnings: list[str] | None = None) -> list[list]:
             raise RuntimeError('Nenhuma aba iniciada com "Ocupação" encontrada na planilha.')
 
         rows: list[list] = []
+        warned_turmas: set[str] = set()
         for sheet in sheet_names:
-            rows.extend(_build_raw_sheet(xls, sheet, warnings))
+            rows.extend(_build_raw_sheet(xls, sheet, warnings, attendance, warned_turmas))
 
     if not rows:
         raise RuntimeError("Nenhuma linha de prática válida encontrada em nenhuma aba.")
@@ -126,7 +130,31 @@ def build_raw(xlsx_path: Path, warnings: list[str] | None = None) -> list[list]:
     return rows
 
 
-def _build_raw_sheet(xls: pd.ExcelFile, sheet: str, warnings: list[str]) -> list[list]:
+def _resolve_agendamentos(
+    checklist_ag: int, turma: str, data_str: str, attendance, warnings: list[str], warned_turmas: set[str]
+) -> int:
+    if attendance is None:
+        return checklist_ag
+    valor, motivo = attendance.get(turma, data_str)
+    if valor is not None:
+        return valor
+    if turma not in warned_turmas:
+        warned_turmas.add(turma)
+        warnings.append(
+            f'Turma "{turma}": {motivo} -- mantive "Agendamentos" da checklist-captacao pra essa turma.'
+        )
+    return checklist_ag
+
+
+def _build_raw_sheet(
+    xls: pd.ExcelFile,
+    sheet: str,
+    warnings: list[str],
+    attendance=None,
+    warned_turmas: set[str] | None = None,
+) -> list[list]:
+    if warned_turmas is None:
+        warned_turmas = set()
     rows: list[list] = []
     raw = xls.parse(sheet, header=None, dtype=object)
 
@@ -171,7 +199,8 @@ def _build_raw_sheet(xls: pd.ExcelFile, sheet: str, warnings: list[str]) -> list
         sp = _to_int(r[col["slots_previstos"]]) if col["slots_previstos"] >= 0 else 0
         se = _to_int(r[col["overbooking"]]) if col["overbooking"] >= 0 else 0
         st = _to_int(r[col["slots_totais"]]) if col["slots_totais"] >= 0 else sp + se
-        ag = _to_int(r[col["agendamentos"]])
+        checklist_ag = _to_int(r[col["agendamentos"]])
+        ag = _resolve_agendamentos(checklist_ag, turma, data_str, attendance, warnings, warned_turmas)
 
         rows.append([turma, unidade, modulo, data_str, sp, se, st, ag])
 
@@ -207,32 +236,45 @@ def _find_pagas_cols(headers_norm: list[str], sheet: str, warnings: list[str]) -
     return col_epaga, col_valor
 
 
-def build_pagas(xlsx_path: Path, warnings: list[str] | None = None) -> dict[str, list[dict]]:
+def build_pagas(
+    xlsx_path: Path, warnings: list[str] | None = None, attendance=None
+) -> dict[str, list[dict]]:
     """Lê as mesmas abas "Ocupação - <Mês>" e agrega, por turma, as práticas
     marcadas como pagas (coluna "É paga?" == "Sim"), somando slots e
     agendamentos e o "Valor total" de cada linha -- mesma fonte que hoje
     alimenta PAGAS_MES à mão em index.html, só que pra todos os meses com
     dado, não só Setembro. Meses sem a coluna "É paga?" (Mai./Jun.) ou sem
-    nenhuma turma paga ficam de fora do dict."""
+    nenhuma turma paga ficam de fora do dict. `attendance` (opcional, ver
+    build_raw) substitui "Agendamentos" pelo número real de comparecimentos
+    cruzado com a ConsultaJá, mesmo critério usado no RAW."""
     if warnings is None:
         warnings = []
 
     with pd.ExcelFile(xlsx_path) as xls:
         sheet_names = [s for s in xls.sheet_names if s.startswith("Ocupação")]
         data: dict[str, list[dict]] = {}
+        warned_turmas: set[str] = set()
         for sheet in sheet_names:
             mm = _sheet_mes_mm(sheet)
             if mm is None:
                 warnings.append(f'Aba "{sheet}" (turmas pagas): mês não reconhecido no nome da aba -- pulada.')
                 continue
-            turmas = _build_pagas_sheet(xls, sheet, warnings)
+            turmas = _build_pagas_sheet(xls, sheet, warnings, attendance, warned_turmas)
             if turmas:
                 data[mm] = turmas
 
     return data
 
 
-def _build_pagas_sheet(xls: pd.ExcelFile, sheet: str, warnings: list[str]) -> list[dict]:
+def _build_pagas_sheet(
+    xls: pd.ExcelFile,
+    sheet: str,
+    warnings: list[str],
+    attendance=None,
+    warned_turmas: set[str] | None = None,
+) -> list[dict]:
+    if warned_turmas is None:
+        warned_turmas = set()
     raw = xls.parse(sheet, header=None, dtype=object)
 
     header_row = _find_header_row(raw)
@@ -247,6 +289,7 @@ def _build_pagas_sheet(xls: pd.ExcelFile, sheet: str, warnings: list[str]) -> li
     col_se = _find_col(headers_norm, ALIASES["overbooking"])
     col_st = _find_col(headers_norm, ALIASES["slots_totais"])
     col_ag = _find_col(headers_norm, ALIASES["agendamentos"])
+    col_data = _find_col(headers_norm, ALIASES["data"])
     col_epaga, col_valor = _find_pagas_cols(headers_norm, sheet, warnings)
 
     if col_turma < 0 or col_epaga < 0:
@@ -278,10 +321,14 @@ def _build_pagas_sheet(xls: pd.ExcelFile, sheet: str, warnings: list[str]) -> li
         if modulo and modulo not in d["modulos"]:
             d["modulos"].append(modulo)
 
+        data_str = _to_date_str(_cell(r, col_data)) if col_data >= 0 else ""
+        checklist_ag = _to_int(_cell(r, col_ag))
+        row_ag = _resolve_agendamentos(checklist_ag, turma, data_str, attendance, warnings, warned_turmas)
+
         d["sp"] += _to_int(_cell(r, col_sp))
         d["se"] += _to_int(_cell(r, col_se))
         d["st"] += _to_int(_cell(r, col_st))
-        d["ag"] += _to_int(_cell(r, col_ag))
+        d["ag"] += row_ag
         d["n"] += 1
         d["valor"] += _to_int(_cell(r, col_valor))
 

@@ -55,8 +55,35 @@ Uma linha por combinação turma+data de prática:
 - **`slots_previstos`** / **`overbooking`** / **`slots_totais`**: capacidade
   planejada da prática (a taxa de ocupação, calculada no próprio
   `index.html`, não fica gravada aqui).
-- **`agendamentos`**: quantidade de alunos agendados/atendidos nessa
-  prática.
+- **`agendamentos`**: quantidade de pacientes que **realmente compareceram**
+  nessa prática (ver "De onde vem o número de Agendamentos" abaixo).
+
+## De onde vem o número de Agendamentos (decisão de 2026-09-16)
+
+`agendamentos` não vem mais da coluna "Agendamentos" da própria
+checklist-captacao (essa coluna é preenchida à mão e reflete quem *estava
+programado*, não quem *veio de verdade* -- inclui agendado/confirmado que
+ainda pode faltar). Em vez disso, `attendance_consultaja.py` cruza cada
+turma+data com `dados-fonte/Base_Consulta_Ja*.xlsx` (a mesma planilha
+usada pelos pipelines de `agendas-pac-real` e da raiz do workspace --
+**este pipeline nunca a baixa**, só reaproveita a mais recente já presente
+na pasta compartilhada) e conta quantos pacientes têm Status
+"Compareceu"/"Atendido" naquele curso+turma+unidade+data.
+
+O casamento funciona porque o nome da turma na checklist já é
+"`<curso> <sigla da unidade> T<número>`" (ex.: `Dermatologia Cirurgica SP
+T01`), e a ConsultaJá guarda essas 3 partes em colunas separadas (Curso/
+Unidade/Turma) -- `attendance_consultaja.parse_turma()` separa um do
+outro. **`slots_previstos` continua vindo só da checklist-captacao** (a
+ConsultaJá não tem capacidade planejada, só agendamentos individuais).
+
+Se uma turma da checklist não bate com nenhuma combinação curso+unidade+
+turma da ConsultaJá (nome digitado diferente, turma nova ainda não
+cadastrada lá, etc.), o pipeline **mantém o valor antigo da checklist**
+pra essa turma e avisa no relatório -- nunca zera silenciosamente. Se a
+planilha da ConsultaJá não for encontrada em `dados-fonte/`, o pipeline
+inteiro cai de volta pro comportamento antigo (valor da checklist), com
+aviso.
 
 ## Correção importante em relação ao upload manual (botão da página)
 
@@ -73,6 +100,10 @@ Este pipeline (`transform_ocupacao.py: ALIASES`) aceita os dois conjuntos
 de nomes, então processa todas as abas corretamente. Se alguém for
 continuar usando o botão de upload da página em vez deste pipeline, vale
 levar essa mesma correção pro JS.
+
+O botão da página também **não** cruza com a ConsultaJá (ver seção acima)
+-- `agendamentos`, se gerado por ele, continua sendo o valor bruto da
+coluna "Agendamentos" da checklist-captacao, não o comparecimento real.
 
 ## Turmas Pagas
 

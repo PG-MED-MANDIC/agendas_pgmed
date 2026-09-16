@@ -5,6 +5,14 @@ SharePoint -- ver README.md > "De onde vem o arquivo") e regrava RAW em
 
     python pipeline/atualizar_tudo.py
 
+O número de "Agendamentos" é cruzado com dados-fonte/Base_Consulta_Ja*.xlsx
+(planilha compartilhada com os pipelines de agendas-pac-real/raiz -- este
+pipeline nunca a baixa, só reaproveita a mais recente já presente) pra
+usar o comparecimento real (Status "Compareceu"/"Atendido") em vez do
+valor digitado na checklist-captacao -- ver pipeline/README.md > "De onde
+vem o número de Agendamentos" e attendance_consultaja.py. Se a planilha da
+ConsultaJá não existir, cai de volta pro valor da checklist (com aviso).
+
 Não faz git add/commit/push -- isso continua manual de propósito (ver
 README.md), pra sempre ter uma revisão humana antes de publicar no
 repositório público.
@@ -15,7 +23,8 @@ import sys
 import traceback
 from datetime import datetime
 
-from config import INDEX_HTML_PATH, PIPELINE_DIR, XLSX_PATH
+from attendance_consultaja import build_attendance, find_latest
+from config import DADOS_FONTE_DIR, INDEX_HTML_PATH, PIPELINE_DIR, XLSX_PATH
 from render_index import upsert_last_update, upsert_pagas, upsert_raw
 from transform_ocupacao import build_pagas, build_raw
 
@@ -46,10 +55,22 @@ def main() -> int:
     report.append("\nPASSO 2/2 -- recalcular RAW e Turmas Pagas")
     try:
         warnings: list[str] = []
-        rows = build_raw(XLSX_PATH, warnings=warnings)
+
+        consultaja_path = find_latest(DADOS_FONTE_DIR)
+        if consultaja_path is None:
+            attendance = None
+            report.append(
+                '  Aviso: nenhuma planilha "Base_Consulta_Ja*.xlsx" encontrada em dados-fonte/ -- '
+                '"Agendamentos" vai usar o valor da própria checklist-captacao, sem cruzar com a ConsultaJá.'
+            )
+        else:
+            attendance = build_attendance(consultaja_path)
+            report.append(f"  Cruzando Agendamentos com {consultaja_path.name} (comparecimento real).")
+
+        rows = build_raw(XLSX_PATH, warnings=warnings, attendance=attendance)
         upsert_raw(INDEX_HTML_PATH, rows)
 
-        pagas = build_pagas(XLSX_PATH, warnings=warnings)
+        pagas = build_pagas(XLSX_PATH, warnings=warnings, attendance=attendance)
         upsert_pagas(INDEX_HTML_PATH, pagas)
 
         upsert_last_update(INDEX_HTML_PATH, f"{datetime.now():%d/%m/%Y %H:%M}")
