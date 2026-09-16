@@ -149,7 +149,7 @@
   </div>
   <div style="text-align:right;flex-shrink:0">
     <div class="sub">Última atualização</div>
-    <div id="last-update" style="font-size:13px;font-weight:bold">15/09/2026 14:00</div>
+    <div id="last-update" style="font-size:13px;font-weight:bold">16/09/2026 08:36</div>
   </div>
 </div>
 
@@ -159,7 +159,7 @@
   <div class="tab" onclick="showPage('unidade',this)">🏛️ Por Unidade</div>
   <div class="tab" onclick="showPage('turma',this)">👥 Por Turma</div>
   <div class="tab" onclick="showPage('modulo',this)">📚 Por Módulo</div>
-  <div class="tab" onclick="showPage('pagas',this)">💰 Turmas Pagas (Set)</div>
+  <div class="tab" onclick="showPage('pagas',this)">💰 Turmas Pagas</div>
   <div class="tab" onclick="showPage('exec',this)">📋 Resumo Executivo</div>
 </div>
 
@@ -1823,7 +1823,11 @@
 
 <!-- ═══════════════ TURMAS PAGAS (SET) ═══════════════ -->
 <div id="page-pagas" class="page">
-  <div style="margin-bottom:12px;font-size:12px;color:#666">Turmas de dermatologia com práticas pagas (extracurriculares) — competência Setembro/2026. <b>Receita 100%</b> = potencial cheio informado na planilha; <b>Receita 60%</b> = cenário conservador (60%).</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    <label style="font-size:12px;font-weight:bold;color:#1A2459">Competência:</label>
+    <select id="filter-mes-pagas" onchange="changeMesPagas(this.value)" style="padding:5px 10px;border:1px solid #ccc;border-radius:5px;font-size:12px;background:#fff"></select>
+  </div>
+  <div style="margin-bottom:12px;font-size:12px;color:#666">Turmas de dermatologia com práticas pagas (extracurriculares) na competência selecionada. <b>Receita 100%</b> = potencial cheio informado na planilha (coluna "Valor total"); <b>Receita 60%</b> = cenário conservador (60%).</div>
   <div class="kpi-row" id="kpi-pagas"></div>
   <div class="kpi-row" id="kpi-pagas-unidade"></div>
   <div class="card">
@@ -2088,31 +2092,40 @@ function mkChart(id, cfg){
   charts[id] = new Chart(ctx, cfg);
 }
 
-// ─── TURMAS PAGAS (SET) ────────────────────────────────────────────────────────
+// ─── TURMAS PAGAS ──────────────────────────────────────────────────────────
+// PAGAS_DATA é regravado pelo pipeline (transform_ocupacao.build_pagas +
+// render_index.upsert_pagas), um array de turmas agregadas por mês (chave
+// "MM"), a partir das colunas "É paga?"/"Valor total" da planilha. PAGAS_MES
+// é a "view" do mês escolhido no dropdown -- ver initMesPagasDropdown().
 function fmtBRL(n){ return n.toLocaleString("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}); }
 
-const PAGAS_MES = [
-  {turma:"Dermatologia SP T09",unidade:"SP",modulos:["M14 - Preenchimento Glúteo"],sp:36,se:6,st:42,ag:35,n:3,valor:36000,valor60:21600},
-  {turma:"Dermatologia CPS T04",unidade:"CPS",modulos:["M14 - Preenchimento Glúteo"],sp:36,se:6,st:42,ag:37,n:3,valor:36000,valor60:21600},
-  {turma:"Dermatologia CPS T06",unidade:"CPS",modulos:["M7 - Laserterapia em Medicina Estética I (LIP, Nd:YAG, Q-Switched, Erbium, CO2, Tímio)"],sp:72,se:24,st:96,ag:94,n:3,valor:25200,valor60:15120},
-  {turma:"Dermatologia CPS T07",unidade:"CPS",modulos:["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"],sp:36,se:12,st:48,ag:67,n:3,valor:21600,valor60:12960},
-  {turma:"Dermatologia SP T12",unidade:"SP",modulos:["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"],sp:36,se:12,st:48,ag:38,n:3,valor:21600,valor60:12960},
-  {turma:"Dermatologia SP T19",unidade:"SP",modulos:["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"],sp:36,se:12,st:48,ag:43,n:3,valor:21600,valor60:12960},
-  {turma:"Dermatologia SP T21",unidade:"SP",modulos:["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"],sp:36,se:12,st:48,ag:44,n:3,valor:21600,valor60:12960},
-  {turma:"Dermatologia SP T15",unidade:"SP",modulos:["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"],sp:36,se:12,st:48,ag:46,n:3,valor:21600,valor60:12960},
-  {turma:"Dermatologia SP T18",unidade:"SP",modulos:["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"],sp:36,se:12,st:48,ag:48,n:3,valor:21600,valor60:12960},
-  {turma:"Dermatologia SP T10",unidade:"SP",modulos:["M12 - Peelings Químicos"],sp:72,se:33,st:105,ag:67,n:3,valor:21600,valor60:12960},
-  {turma:"Dermatologia SP T17",unidade:"SP",modulos:["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"],sp:36,se:12,st:48,ag:24,n:3,valor:21600,valor60:12960},
-  {turma:"Dermatologia CPS T03",unidade:"CPS",modulos:["M17 - Tratamentos Capilares"],sp:63,se:21,st:84,ag:84,n:3,valor:18900,valor60:11340},
-  {turma:"Dermatologia SP T06",unidade:"SP",modulos:["M17 - Tratamentos Capilares"],sp:63,se:21,st:84,ag:82,n:3,valor:18900,valor60:11340},
-  {turma:"Dermatologia CPS T05",unidade:"CPS",modulos:["M7 - Laserterapia em Medicina Estética I (LIP, Nd:YAG, Q-Switched, Erbium, CO2, Tímio)"],sp:48,se:16,st:64,ag:73,n:2,valor:16800,valor60:10080},
-  {turma:"Dermatologia BSB T02",unidade:"BSB",modulos:["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"],sp:27,se:9,st:36,ag:30,n:3,valor:16200,valor60:9720}
-];
+const PAGAS_DATA = {"06": [{"turma": "Dermatologia CPS T04", "unidade": "CPS", "modulos": ["M11 - Laserterapia em Medicina Estética II (Radiofrequência Agulhada, Plasma, Ultrassom Micro e Microfocado, Ondas de Choque e Campo Eletromagnético)"], "sp": 72, "se": 0, "st": 72, "ag": 64, "n": 3, "valor": 25200, "valor60": 15120}, {"turma": "Dermatologia SP T09", "unidade": "SP", "modulos": ["M11 - Laserterapia em Medicina Estética II (Radiofrequência Agulhada, Plasma, Ultrassom Micro e Microfocado, Ondas de Choque e Campo Eletromagnético)"], "sp": 72, "se": 17, "st": 89, "ag": 87, "n": 3, "valor": 25200, "valor60": 15120}, {"turma": "Dermatologia SP T08", "unidade": "SP", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"], "sp": 36, "se": 16, "st": 52, "ag": 52, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T18", "unidade": "SP", "modulos": ["M3 - Técnicas de Aplicação de Toxina Botulínica na Face"], "sp": 36, "se": 19, "st": 55, "ag": 55, "n": 3, "valor": 18000, "valor60": 10800}, {"turma": "Dermatologia SP T21", "unidade": "SP", "modulos": ["M3 - Técnicas de Aplicação de Toxina Botulínica na Face"], "sp": 36, "se": 13, "st": 49, "ag": 49, "n": 3, "valor": 18000, "valor60": 10800}, {"turma": "Dermatologia One SP T01", "unidade": "SP", "modulos": ["M3 - Ácido Hialurônico I – preenchimento básico, MD Codes, proporções faciais"], "sp": 12, "se": 4, "st": 16, "ag": 16, "n": 1, "valor": 7200, "valor60": 4320}, {"turma": "Dermatologia SP T10", "unidade": "SP", "modulos": ["M7 - Laserterapia em Medicina Estética I (LIP, Nd:YAG, Q-Switched, Erbium, CO2, Tímio)"], "sp": 72, "se": 7, "st": 79, "ag": 76, "n": 3, "valor": 25200, "valor60": 15120}, {"turma": "Dermatologia SP T19", "unidade": "SP", "modulos": ["M3 - Técnicas de Aplicação de Toxina Botulínica na Face"], "sp": 24, "se": 6, "st": 30, "ag": 30, "n": 2, "valor": 12000, "valor60": 7200}], "07": [{"turma": "Dermatologia CPS T08", "unidade": "CPS", "modulos": ["M3 - Técnicas de Aplicação de Toxina Botulínica na Face"], "sp": 12, "se": 4, "st": 16, "ag": 21, "n": 1, "valor": 6000, "valor60": 3600}, {"turma": "Dermatologia SP T09", "unidade": "SP", "modulos": ["M12 - Peelings Químicos"], "sp": 72, "se": 33, "st": 105, "ag": 66, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T04", "unidade": "SP", "modulos": ["M19 - Técnicas de Rejuvenescimento Regenerativo: PRP, MMP, Biorremodeladores e Bioestimuladores"], "sp": 36, "se": 6, "st": 42, "ag": 40, "n": 3, "valor": 32400, "valor60": 19440}, {"turma": "Dermatologia SP T14", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 43, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T13", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 44, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T08", "unidade": "SP", "modulos": ["M11 - Laserterapia em Medicina Estética II (Radiofrequência Agulhada, Plasma, Ultrassom Micro e Microfocado, Ondas de Choque e Campo Eletromagnético)"], "sp": 72, "se": 24, "st": 96, "ag": 119, "n": 3, "valor": 25200, "valor60": 15120}, {"turma": "Dermatologia SP T11", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 51, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia BSB T03", "unidade": "BSB", "modulos": ["M3 - Técnicas de Aplicação de Toxina Botulínica na Face"], "sp": 36, "se": 12, "st": 48, "ag": 53, "n": 3, "valor": 18000, "valor60": 10800}, {"turma": "Dermatologia CPS T04", "unidade": "CPS", "modulos": ["M12 - Peelings Químicos"], "sp": 72, "se": 33, "st": 105, "ag": 71, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia CPS T09", "unidade": "CPS", "modulos": ["M3 - Técnicas de Aplicação de Toxina Botulínica na Face"], "sp": 36, "se": 12, "st": 48, "ag": 63, "n": 3, "valor": 18000, "valor60": 10800}, {"turma": "Dermatologia SP T10", "unidade": "SP", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"], "sp": 24, "se": 8, "st": 32, "ag": 29, "n": 2, "valor": 14400, "valor60": 8640}, {"turma": "Dermatologia SP T12", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 24, "se": 8, "st": 32, "ag": 26, "n": 2, "valor": 14400, "valor60": 8640}], "08": [{"turma": "Dermatologia SP T10", "unidade": "SP", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)", "M11 - Laserterapia em Medicina Estética II (Radiofrequência Agulhada, Plasma, Ultrassom Micro e Microfocado, Ondas de Choque e Campo Eletromagnético)"], "sp": 84, "se": 28, "st": 112, "ag": 105, "n": 4, "valor": 32400, "valor60": 19440}, {"turma": "Dermatologia SP T12", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 12, "se": 4, "st": 16, "ag": 15, "n": 1, "valor": 7200, "valor60": 4320}, {"turma": "Dermatologia BSB T02", "unidade": "BSB", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 27, "se": 9, "st": 36, "ag": 23, "n": 3, "valor": 16200, "valor60": 9720}, {"turma": "Dermatologia SP T13", "unidade": "SP", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"], "sp": 36, "se": 12, "st": 48, "ag": 46, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T15", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 46, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T08", "unidade": "SP", "modulos": ["M12 - Peelings Químicos"], "sp": 72, "se": 33, "st": 105, "ag": 69, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T11", "unidade": "SP", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"], "sp": 36, "se": 12, "st": 48, "ag": 44, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T16", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 41, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia One SP T01", "unidade": "SP", "modulos": ["M5 - Laser I – conceitos, fototipos, rejuvenescimento e melasma"], "sp": 24, "se": 8, "st": 32, "ag": 31, "n": 1, "valor": 8400, "valor60": 5040}, {"turma": "Dermatologia SP T14", "unidade": "SP", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"], "sp": 36, "se": 12, "st": 48, "ag": 42, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T20", "unidade": "SP", "modulos": ["M3 - Técnicas de Aplicação de Toxina Botulínica na Face"], "sp": 36, "se": 12, "st": 48, "ag": 52, "n": 3, "valor": 18000, "valor60": 10800}, {"turma": "Dermatologia SP T17", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 47, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia CPS T05", "unidade": "CPS", "modulos": ["M7 - Laserterapia em Medicina Estética I (LIP, Nd:YAG, Q-Switched, Erbium, CO2, Tímio)"], "sp": 24, "se": 8, "st": 32, "ag": 32, "n": 1, "valor": 8400, "valor60": 5040}], "09": [{"turma": "Dermatologia CPS T05", "unidade": "CPS", "modulos": ["M7 - Laserterapia em Medicina Estética I (LIP, Nd:YAG, Q-Switched, Erbium, CO2, Tímio)"], "sp": 48, "se": 16, "st": 64, "ag": 73, "n": 2, "valor": 16800, "valor60": 10080}, {"turma": "Dermatologia CPS T07", "unidade": "CPS", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 67, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T09", "unidade": "SP", "modulos": ["M14 - Preenchimento Glúteo"], "sp": 36, "se": 6, "st": 42, "ag": 35, "n": 3, "valor": 36000, "valor60": 21600}, {"turma": "Dermatologia CPS T04", "unidade": "CPS", "modulos": ["M14 - Preenchimento Glúteo"], "sp": 36, "se": 6, "st": 42, "ag": 38, "n": 3, "valor": 36000, "valor60": 21600}, {"turma": "Dermatologia SP T12", "unidade": "SP", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"], "sp": 36, "se": 12, "st": 48, "ag": 58, "n": 3, "valor": 14400, "valor60": 8640}, {"turma": "Dermatologia SP T19", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 44, "n": 3, "valor": 14400, "valor60": 8640}, {"turma": "Dermatologia SP T21", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 49, "n": 3, "valor": 14400, "valor60": 8640}, {"turma": "Dermatologia BSB T02", "unidade": "BSB", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"], "sp": 27, "se": 9, "st": 36, "ag": 37, "n": 3, "valor": 16200, "valor60": 9720}, {"turma": "Dermatologia CPS T03", "unidade": "CPS", "modulos": ["M17 - Tratamentos Capilares"], "sp": 63, "se": 21, "st": 84, "ag": 66, "n": 3, "valor": 18900, "valor60": 11340}, {"turma": "Dermatologia SP T06", "unidade": "SP", "modulos": ["M17 - Tratamentos Capilares"], "sp": 63, "se": 21, "st": 84, "ag": 75, "n": 3, "valor": 18900, "valor60": 11340}, {"turma": "Dermatologia SP T15", "unidade": "SP", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"], "sp": 36, "se": 12, "st": 48, "ag": 40, "n": 3, "valor": 14400, "valor60": 8640}, {"turma": "Dermatologia SP T18", "unidade": "SP", "modulos": ["M8 - Técnicas de Preenchimento com Ácido Hialurônico na Face"], "sp": 36, "se": 12, "st": 48, "ag": 48, "n": 3, "valor": 14400, "valor60": 8640}, {"turma": "Dermatologia SP T10", "unidade": "SP", "modulos": ["M12 - Peelings Químicos"], "sp": 72, "se": 33, "st": 105, "ag": 71, "n": 3, "valor": 21600, "valor60": 12960}, {"turma": "Dermatologia SP T17", "unidade": "SP", "modulos": ["M10 - Técnicas de Preenchimento com Ácido Hialurônico II (Lábios, Olheiras e Queixo)"], "sp": 36, "se": 12, "st": 48, "ag": 46, "n": 3, "valor": 14400, "valor60": 8640}, {"turma": "Dermatologia CPS T06", "unidade": "CPS", "modulos": ["M7 - Laserterapia em Medicina Estética I (LIP, Nd:YAG, Q-Switched, Erbium, CO2, Tímio)"], "sp": 72, "se": 24, "st": 96, "ag": 94, "n": 3, "valor": 25200, "valor60": 15120}]};
+let curMesPagas = null;
+let PAGAS_MES = [];
+
+function initMesPagasDropdown(){
+  const meses = Object.keys(PAGAS_DATA).sort();
+  const s = document.getElementById("filter-mes-pagas");
+  if(!s) return;
+  s.innerHTML = meses.map(mm=>`<option value="${mm}">${getMesLabel(mm)}</option>`).join("");
+  if(curMesPagas===null || !meses.includes(curMesPagas)){
+    curMesPagas = meses.length ? meses[meses.length-1] : null;
+  }
+  if(curMesPagas) s.value = curMesPagas;
+  PAGAS_MES = curMesPagas ? (PAGAS_DATA[curMesPagas]||[]) : [];
+}
+
+function changeMesPagas(v){
+  curMesPagas = v;
+  PAGAS_MES = PAGAS_DATA[v] || [];
+  buildPagas();
+}
 
 function buildPagas(){
+  initMesPagasDropdown();
   const total = PAGAS_MES.reduce((a,d)=>({sp:a.sp+d.sp,st:a.st+d.st,ag:a.ag+d.ag,valor:a.valor+d.valor,valor60:a.valor60+(d.valor60||0),n:a.n+d.n}),{sp:0,st:0,ag:0,valor:0,valor60:0,n:0});
   document.getElementById("kpi-pagas").innerHTML = `
-    <div class="kpi" style="border-left-color:#7F6000"><div class="label">Turmas Pagas</div><div class="value" style="color:#7F6000">${PAGAS_MES.length}</div><div class="sub">Dermatologia · Set/2026</div></div>
+    <div class="kpi" style="border-left-color:#7F6000"><div class="label">Turmas Pagas</div><div class="value" style="color:#7F6000">${PAGAS_MES.length}</div><div class="sub">Dermatologia · ${curMesPagas?getMesLabel(curMesPagas):"—"}/2026</div></div>
     <div class="kpi green"><div class="label">Receita 100%</div><div class="value">${fmtBRL(total.valor)}</div><div class="sub">${total.n} práticas · potencial cheio</div></div>
     <div class="kpi orange"><div class="label">Receita 60%</div><div class="value">${fmtBRL(total.valor60)}</div><div class="sub">cenário conservador</div></div>
     <div class="kpi orange"><div class="label">Ocupação (base)</div><div class="value">${pct(total.ag,total.sp)}</div><div class="sub">${fmtN(total.ag)} agend. / ${fmtN(total.sp)} slots</div></div>

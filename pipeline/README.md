@@ -74,6 +74,21 @@ de nomes, então processa todas as abas corretamente. Se alguém for
 continuar usando o botão de upload da página em vez deste pipeline, vale
 levar essa mesma correção pro JS.
 
+## Turmas Pagas
+
+A aba "💰 Turmas Pagas" do dashboard lê a constante `PAGAS_DATA`
+(`transform_ocupacao.build_pagas` + `render_index.upsert_pagas`),
+regravada a cada execução deste pipeline junto com `RAW`. Ela agrega, por
+turma e por mês, as práticas marcadas como pagas na planilha (coluna
+**"É paga?"** = "Sim"), somando slots/agendamentos e a coluna **"Valor
+total"** de cada linha. O dropdown "Competência" na página escolhe qual
+mês de `PAGAS_DATA` exibir (por padrão, o mais recente com dado).
+
+Como a planilha teve cabeçalhos corrompidos em algumas abas (célula da
+coluna "Valor total" virou um número solto ou ficou vazia -- visto em
+Jul./Ago./Mai./Jun.), `_find_pagas_cols()` cai pro fallback posicional
+(coluna logo após "É paga?") nesses casos, com aviso no relatório.
+
 ## O que o pipeline garante
 
 - **Sem dado de aluno**: a planilha de origem já é agregada por

@@ -16,8 +16,8 @@ import traceback
 from datetime import datetime
 
 from config import INDEX_HTML_PATH, PIPELINE_DIR, XLSX_PATH
-from render_index import upsert_last_update, upsert_raw
-from transform_ocupacao import build_raw
+from render_index import upsert_last_update, upsert_pagas, upsert_raw
+from transform_ocupacao import build_pagas, build_raw
 
 LOG_PATH = PIPELINE_DIR / "atualizacoes.log"
 
@@ -43,11 +43,15 @@ def main() -> int:
         _log(report)
         return 1
 
-    report.append("\nPASSO 2/2 -- recalcular RAW")
+    report.append("\nPASSO 2/2 -- recalcular RAW e Turmas Pagas")
     try:
         warnings: list[str] = []
         rows = build_raw(XLSX_PATH, warnings=warnings)
         upsert_raw(INDEX_HTML_PATH, rows)
+
+        pagas = build_pagas(XLSX_PATH, warnings=warnings)
+        upsert_pagas(INDEX_HTML_PATH, pagas)
+
         upsert_last_update(INDEX_HTML_PATH, f"{datetime.now():%d/%m/%Y %H:%M}")
     except Exception:
         report.append("  FALHOU: erro ao processar/gravar os dados. Detalhes:")
@@ -56,6 +60,10 @@ def main() -> int:
         return 1
 
     report.append(f"  OK -- {len(rows)} linhas de prática.")
+    report.append(
+        f"  OK -- Turmas Pagas: {sum(len(v) for v in pagas.values())} turmas em "
+        f"{len(pagas)} mês(es) ({', '.join(sorted(pagas))})."
+    )
     if warnings:
         report.append("  Avisos (revisar manualmente):")
         for w in warnings:

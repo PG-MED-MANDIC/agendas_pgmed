@@ -51,6 +51,14 @@ CAMPOS_OBRIGATORIOS = ("turma", "unidade", "modulo", "data", "agendamentos")
 
 TURMAS_IGNORADAS = {"", "total do mês", "total do mes", "turma"}
 
+# Abas "Ocupação - <Mês>" -> "MM", pra casar com getMesLabel() do index.html
+# (mesmo dicionário de abreviação, só invertido). Só usado por build_pagas().
+MESES_SHEET_TO_MM: dict[str, str] = {
+    "mai": "05", "jun": "06", "jul": "07", "ago": "08",
+    "set": "09", "out": "10", "nov": "11", "dez": "12", "jan": "01",
+    "fev": "02", "mar": "03", "abr": "04",
+}
+
 
 def _norm(value) -> str:
     s = str(value if value is not None else "").strip().lower()
@@ -168,3 +176,116 @@ def _build_raw_sheet(xls: pd.ExcelFile, sheet: str, warnings: list[str]) -> list
         rows.append([turma, unidade, modulo, data_str, sp, se, st, ag])
 
     return rows
+
+
+def _sheet_mes_mm(sheet: str) -> str | None:
+    """'Ocupação - Set.' -> '09'. Usa as 3 primeiras letras do nome do mês
+    (sem acento, minúsculo) contra MESES_SHEET_TO_MM."""
+    suffix = sheet.split("-", 1)[-1] if "-" in sheet else sheet
+    key = _norm(suffix).strip(" .")[:3]
+    return MESES_SHEET_TO_MM.get(key)
+
+
+def _find_pagas_cols(headers_norm: list[str], sheet: str, warnings: list[str]) -> tuple[int, int]:
+    """Localiza as colunas 'É paga?' e 'Valor total'. Achado ao montar isso
+    (2026-09-16): nas abas de Jul./Ago., o cabeçalho de "Valor total" veio
+    corrompido na planilha de origem (um número solto ou célula vazia em
+    vez do texto) -- mesmo tipo de falha já visto na aba "Ocupação - Mai."
+    pra "Agendamentos" (ver o fallback logo acima, em _build_raw_sheet).
+    Nesses casos cai pro fallback posicional: a coluna de valor sempre vem
+    logo depois de "É paga?" na planilha."""
+    col_epaga = _find_col(headers_norm, ["e paga"])
+    if col_epaga < 0:
+        return -1, -1
+    col_valor = _find_col(headers_norm, ["valor total"])
+    if col_valor < 0:
+        warnings.append(
+            f'Aba "{sheet}": coluna "Valor total" sem nome reconhecível -- usando a coluna '
+            f'logo após "É paga?" (posição {col_epaga + 1}) como fallback.'
+        )
+        col_valor = col_epaga + 1
+    return col_epaga, col_valor
+
+
+def build_pagas(xlsx_path: Path, warnings: list[str] | None = None) -> dict[str, list[dict]]:
+    """Lê as mesmas abas "Ocupação - <Mês>" e agrega, por turma, as práticas
+    marcadas como pagas (coluna "É paga?" == "Sim"), somando slots e
+    agendamentos e o "Valor total" de cada linha -- mesma fonte que hoje
+    alimenta PAGAS_MES à mão em index.html, só que pra todos os meses com
+    dado, não só Setembro. Meses sem a coluna "É paga?" (Mai./Jun.) ou sem
+    nenhuma turma paga ficam de fora do dict."""
+    if warnings is None:
+        warnings = []
+
+    with pd.ExcelFile(xlsx_path) as xls:
+        sheet_names = [s for s in xls.sheet_names if s.startswith("Ocupação")]
+        data: dict[str, list[dict]] = {}
+        for sheet in sheet_names:
+            mm = _sheet_mes_mm(sheet)
+            if mm is None:
+                warnings.append(f'Aba "{sheet}" (turmas pagas): mês não reconhecido no nome da aba -- pulada.')
+                continue
+            turmas = _build_pagas_sheet(xls, sheet, warnings)
+            if turmas:
+                data[mm] = turmas
+
+    return data
+
+
+def _build_pagas_sheet(xls: pd.ExcelFile, sheet: str, warnings: list[str]) -> list[dict]:
+    raw = xls.parse(sheet, header=None, dtype=object)
+
+    header_row = _find_header_row(raw)
+    if header_row is None:
+        return []
+
+    headers_norm = [_norm(c) for c in raw.iloc[header_row].tolist()]
+    col_turma = _find_col(headers_norm, ALIASES["turma"])
+    col_unidade = _find_col(headers_norm, ALIASES["unidade"])
+    col_modulo = _find_col(headers_norm, ALIASES["modulo"])
+    col_sp = _find_col(headers_norm, ALIASES["slots_previstos"])
+    col_se = _find_col(headers_norm, ALIASES["overbooking"])
+    col_st = _find_col(headers_norm, ALIASES["slots_totais"])
+    col_ag = _find_col(headers_norm, ALIASES["agendamentos"])
+    col_epaga, col_valor = _find_pagas_cols(headers_norm, sheet, warnings)
+
+    if col_turma < 0 or col_epaga < 0:
+        return []  # aba sem coluna "É paga?" (ex.: Mai./Jun.) -- sem dado de turmas pagas
+
+    def _cell(r: list, idx: int):
+        return r[idx] if 0 <= idx < len(r) else None
+
+    por_turma: dict[str, dict] = {}
+    ordem: list[str] = []
+    for i in range(header_row + 1, len(raw)):
+        r = raw.iloc[i].tolist()
+        turma = str(_cell(r, col_turma) or "").strip()
+        if _norm(turma) in TURMAS_IGNORADAS:
+            continue
+        if _norm(str(_cell(r, col_epaga) or "")) != "sim":
+            continue
+
+        d = por_turma.setdefault(turma, {
+            "turma": turma,
+            "unidade": str(_cell(r, col_unidade) or "").strip(),
+            "modulos": [],
+            "sp": 0, "se": 0, "st": 0, "ag": 0, "n": 0, "valor": 0,
+        })
+        if turma not in ordem:
+            ordem.append(turma)
+
+        modulo = str(_cell(r, col_modulo) or "").strip()
+        if modulo and modulo not in d["modulos"]:
+            d["modulos"].append(modulo)
+
+        d["sp"] += _to_int(_cell(r, col_sp))
+        d["se"] += _to_int(_cell(r, col_se))
+        d["st"] += _to_int(_cell(r, col_st))
+        d["ag"] += _to_int(_cell(r, col_ag))
+        d["n"] += 1
+        d["valor"] += _to_int(_cell(r, col_valor))
+
+    for turma in ordem:
+        por_turma[turma]["valor60"] = round(por_turma[turma]["valor"] * 0.6)
+
+    return [por_turma[t] for t in ordem]
