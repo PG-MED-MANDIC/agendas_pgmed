@@ -55,20 +55,33 @@ Uma linha por combinação turma+data de prática:
 - **`slots_previstos`** / **`overbooking`** / **`slots_totais`**: capacidade
   planejada da prática (a taxa de ocupação, calculada no próprio
   `index.html`, não fica gravada aqui).
-- **`agendamentos`**: quantidade de pacientes que **realmente compareceram**
-  nessa prática (ver "De onde vem o número de Agendamentos" abaixo).
+- **`agendamentos`**: quantidade de pacientes que **ocupam o slot**
+  (agendado, confirmado, compareceu, atendido ou faltou -- qualquer coisa
+  exceto cancelado) nessa prática (ver "De onde vem o número de
+  Agendamentos" abaixo).
 
-## De onde vem o número de Agendamentos (decisão de 2026-09-16)
+## De onde vem o número de Agendamentos (decisão de 2026-09-17)
 
-`agendamentos` não vem mais da coluna "Agendamentos" da própria
-checklist-captacao (essa coluna é preenchida à mão e reflete quem *estava
-programado*, não quem *veio de verdade* -- inclui agendado/confirmado que
-ainda pode faltar). Em vez disso, `attendance_consultaja.py` cruza cada
-turma+data com `dados-fonte/Base_Consulta_Ja*.xlsx` (a mesma planilha
-usada pelos pipelines de `agendas-pac-real` e da raiz do workspace --
-**este pipeline nunca a baixa**, só reaproveita a mais recente já presente
-na pasta compartilhada) e conta quantos pacientes têm Status
-"Compareceu"/"Atendido" naquele curso+turma+unidade+data.
+`agendamentos` não vem da coluna "Agendamentos" da própria
+checklist-captacao (essa coluna é preenchida à mão). Em vez disso,
+`attendance_consultaja.py` cruza cada turma+data com
+`dados-fonte/Base_Consulta_Ja*.xlsx` (a mesma planilha usada pelos
+pipelines de `agendas-pac-real` e da raiz do workspace -- **este pipeline
+nunca a baixa**, só reaproveita a mais recente já presente na pasta
+compartilhada) e conta quantos pacientes têm qualquer Status **diferente
+de "Cancelado"** (Agendado, Confirmado, Compareceu, Atendido ou Faltou)
+naquele curso+turma+unidade+data.
+
+Isso já foi tentado de outro jeito (decisão de 2026-09-16, revertida):
+contar só Status "Compareceu"/"Atendido" (comparecimento real). O
+problema é que esse dashboard compara **capacidade** (slots previstos)
+com **demanda** (quantos pacientes ocupam a turma) pra qualquer semana,
+inclusive futuras -- e uma data que ainda não aconteceu nunca tem
+"Compareceu"/"Atendido", então a ocupação de toda semana futura ficava
+zerada mesmo com pacientes já marcados. Contar por "não foi cancelado"
+resolve isso sem precisar de nenhuma lógica de "hoje": um paciente que
+faltou ainda ocupou o slot no momento em que agendou, só o cancelamento
+libera a vaga.
 
 O casamento funciona porque o nome da turma na checklist já é
 "`<curso> <sigla da unidade> T<número>`" (ex.: `Dermatologia Cirurgica SP

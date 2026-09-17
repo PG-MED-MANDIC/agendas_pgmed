@@ -2,12 +2,24 @@
 ConsultaJá (mesma planilha usada pelos pipelines de agendas-pac-real e da
 raiz do workspace -- dados-fonte/Base_Consulta_Ja*.xlsx, compartilhada,
 nunca baixada por este pipeline) pra substituir a coluna "Agendamentos" da
-checklist (preenchida à mão) pelo número real de pacientes atendidos
-(Status "Compareceu"/"Atendido"), casando por curso+turma+unidade+data.
+checklist (preenchida à mão) pelo número real de pacientes agendados
+(qualquer Status exceto "Cancelado"), casando por curso+turma+unidade+data.
 
-Decisão de 2026-09-16: a checklist-captacao continua sendo a fonte de
-"Slots previstos" (capacidade planejada) -- só o numerador (quantos
-vieram de verdade) passa a vir da ConsultaJá.
+Decisão de 2026-09-17 (substitui a de 2026-09-16): a primeira versão deste
+módulo contava só Status "Compareceu"/"Atendido" (comparecimento real).
+Isso zerava a ocupação de qualquer semana futura, porque datas que ainda
+não aconteceram nunca têm "Compareceu"/"Atendido" -- mesmo que já existam
+pacientes marcados pra elas. O objetivo deste dashboard é comparar
+capacidade (slots previstos) com demanda (quantos pacientes ocupam um
+slot), então o que importa é "o slot está reservado?", não "o atendimento
+já ocorreu?". Por isso agora conta qualquer Status != "Cancelado"
+(Agendado, Confirmado, Compareceu, Atendido, Faltou) -- um paciente que
+faltou ainda ocupou o slot no momento em que agendou; só o cancelamento
+libera a vaga.
+
+A checklist-captacao continua sendo a fonte de "Slots previstos"
+(capacidade planejada) -- só o numerador (quantos pacientes ocupam a
+turma) passa a vir da ConsultaJá.
 
 O nome da turma na checklist ("Dermatologia Cirurgica SP T01") é composto
 de curso + unidade (sigla) + turma; a ConsultaJá guarda essas 3 partes em
@@ -25,7 +37,7 @@ from pathlib import Path
 
 import pandas as pd
 
-REALIZADO_STATUSES = {"Compareceu", "Atendido"}
+STATUS_CANCELADO = "Cancelado"
 
 UNIDADE_MAP = {"BSB": "Brasília", "CPS": "Campinas", "SP": "São Paulo", "ONL": "Online"}
 
@@ -59,9 +71,9 @@ def find_latest(dados_fonte_dir: Path) -> Path | None:
 
 class Attendance:
     """Lookup (curso, unidade sigla, turma, data) -> nº de pacientes que
-    realmente vieram, mais o conjunto de combinações curso+unidade+turma
-    conhecidas da ConsultaJá (pra distinguir "0 nessa data" de "turma que a
-    ConsultaJá nem conhece")."""
+    ocupam aquele slot (qualquer Status != "Cancelado"), mais o conjunto de
+    combinações curso+unidade+turma conhecidas da ConsultaJá (pra
+    distinguir "0 nessa data" de "turma que a ConsultaJá nem conhece")."""
 
     def __init__(self, counts: dict[tuple[str, str, int, str], int], known_turmas: set[tuple[str, str, int]]):
         self._counts = counts
@@ -98,7 +110,7 @@ def build_attendance(xlsx_path: Path) -> Attendance:
         curso_norm = _norm(row.Curso)
         known_turmas.add((curso_norm, unidade_code, turma_num))
 
-        if row.Status not in REALIZADO_STATUSES:
+        if row.Status == STATUS_CANCELADO:
             continue
         data_str = str(row.Data).strip()
         key = (curso_norm, unidade_code, turma_num, data_str)

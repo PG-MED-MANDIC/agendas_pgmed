@@ -8,10 +8,11 @@ SharePoint -- ver README.md > "De onde vem o arquivo") e regrava RAW em
 O número de "Agendamentos" é cruzado com dados-fonte/Base_Consulta_Ja*.xlsx
 (planilha compartilhada com os pipelines de agendas-pac-real/raiz -- este
 pipeline nunca a baixa, só reaproveita a mais recente já presente) pra
-usar o comparecimento real (Status "Compareceu"/"Atendido") em vez do
-valor digitado na checklist-captacao -- ver pipeline/README.md > "De onde
-vem o número de Agendamentos" e attendance_consultaja.py. Se a planilha da
-ConsultaJá não existir, cai de volta pro valor da checklist (com aviso).
+usar quantos pacientes ocupam o slot (qualquer Status != "Cancelado") em
+vez do valor digitado na checklist-captacao -- ver pipeline/README.md >
+"De onde vem o número de Agendamentos" e attendance_consultaja.py. Se a
+planilha da ConsultaJá não existir, cai de volta pro valor da checklist
+(com aviso).
 
 Não faz git add/commit/push -- isso continua manual de propósito (ver
 README.md), pra sempre ter uma revisão humana antes de publicar no
@@ -65,7 +66,7 @@ def main() -> int:
             )
         else:
             attendance = build_attendance(consultaja_path)
-            report.append(f"  Cruzando Agendamentos com {consultaja_path.name} (comparecimento real).")
+            report.append(f"  Cruzando Agendamentos com {consultaja_path.name} (pacientes agendados, exceto cancelados).")
 
         rows = build_raw(XLSX_PATH, warnings=warnings, attendance=attendance)
         upsert_raw(INDEX_HTML_PATH, rows)
