@@ -151,7 +151,7 @@
   </div>
   <div style="text-align:right;flex-shrink:0">
     <div class="sub">Última atualização</div>
-    <div id="last-update" style="font-size:13px;font-weight:bold">18/09/2026 07:58</div>
+    <div id="last-update" style="font-size:13px;font-weight:bold">18/09/2026 14:49</div>
   </div>
 </div>
 
@@ -1993,9 +1993,9 @@ function changeUnidMacro(v){ curUnidMacro=v; buildMacro(); }
 function getMesLabel(mm){return{'01':'Jan','02':'Fev','03':'Mar','04':'Abr','05':'Mai','06':'Jun','07':'Jul','08':'Ago','09':'Set','10':'Out','11':'Nov','12':'Dez'}[mm]||mm;}
 function mondayKeyToLabel(key,idx){
   const mon=new Date(key+"T12:00:00Z");
-  const sat=new Date(mon); sat.setUTCDate(mon.getUTCDate()+5);
+  const sun=new Date(mon); sun.setUTCDate(mon.getUTCDate()+6);
   const fmt=d=>`${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}`;
-  return `S${idx+1} (${fmt(mon)}–${fmt(sat)})`;
+  return `S${idx+1} (${fmt(mon)}–${fmt(sun)})`;
 }
 function updateWeekLabels(){
   const src=curMes?DATA.filter(d=>d.data.split("/")[1]===curMes):DATA;
