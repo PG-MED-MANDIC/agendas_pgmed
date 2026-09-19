@@ -140,6 +140,14 @@ Jul./Ago./Mai./Jun.), `_find_pagas_cols()` cai pro fallback posicional
 - **Regravação cirúrgica** (`render_index.py`): só a constante `RAW` (e o
   texto de "última atualização") são regravados -- o resto do arquivo
   (HTML, CSS, lógica de gráficos/filtros) não é tocado.
-- **Sem automação não supervisionada**: nada aqui roda sozinho -- cada
-  atualização depende de alguém baixar a planilha do SharePoint e rodar o
-  script, por decisão.
+- **Download da planilha continua manual**: baixar `checklist-captacao.xlsx`
+  do SharePoint continua depender de alguém, por decisão de 2026-09-15 (evita
+  automatizar acesso a um sistema do SharePoint sem passar pela TI) -- isso
+  não mudou.
+- **Execução do script deixou de ser só manual (2026-09-18)**: a rotina
+  `atualizar_diario_n8n.py` (raiz do workspace) roda este pipeline sozinha
+  todo dia às 06:00 via n8n, usando a planilha que já estiver em
+  `dados-fonte/` -- decisão consciente do usuário, que substituiu a regra
+  anterior de "nada roda sozinho" só pra este passo. Se a planilha estiver
+  desatualizada, a rotina só *avisa* (checa a idade do arquivo), nunca baixa
+  nem toca no SharePoint.
