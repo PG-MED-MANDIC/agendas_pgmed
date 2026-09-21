@@ -23,11 +23,17 @@ from __future__ import annotations
 import sys
 import traceback
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from attendance_consultaja import build_attendance, find_latest
 from config import DADOS_FONTE_DIR, INDEX_HTML_PATH, PIPELINE_DIR, XLSX_PATH
 from render_index import upsert_last_update, upsert_pagas, upsert_raw
 from transform_ocupacao import build_pagas, build_raw
+
+# Desde a migração pro GitHub Actions (2026-09-21), o runner roda em UTC --
+# sem fuso explícito, "última atualização" saía 3h atrasada (hora de
+# Brasília não observa horário de verão desde 2019, sempre UTC-3).
+FUSO_BR = ZoneInfo("America/Sao_Paulo")
 
 LOG_PATH = PIPELINE_DIR / "atualizacoes.log"
 
@@ -74,7 +80,7 @@ def main() -> int:
         pagas = build_pagas(XLSX_PATH, warnings=warnings, attendance=attendance)
         upsert_pagas(INDEX_HTML_PATH, pagas)
 
-        upsert_last_update(INDEX_HTML_PATH, f"{datetime.now():%d/%m/%Y %H:%M}")
+        upsert_last_update(INDEX_HTML_PATH, f"{datetime.now(FUSO_BR):%d/%m/%Y %H:%M}")
     except Exception:
         report.append("  FALHOU: erro ao processar/gravar os dados. Detalhes:")
         report.append(traceback.format_exc())
