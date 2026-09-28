@@ -1894,6 +1894,7 @@
       <option value="">Todos</option>
     </select>
   </div>
+  <div class="week-nav" id="week-nav-exec"></div>
   <div class="filter-bar" style="margin-bottom:12px">
     <input id="search-turma-exec" type="text" placeholder="Buscar turma…" oninput="buildExec()" style="flex:1.2">
     <select id="filter-unid-exec" onchange="buildExec()">
@@ -2292,7 +2293,20 @@ function initMesExecDropdown(){
   }
   if([...s.options].some(o=>o.value===curMesExec)) s.value=curMesExec;
 }
-function changeMesExec(v){ curMesExec=v; buildExec(); }
+function changeMesExec(v){ curMesExec=v; curSemanaExec=null; buildExec(); }
+
+let curSemanaExec = null; // weekKey (segunda-feira, "AAAA-MM-DD") ou null = todas as semanas do mês
+function buildExecWeekNav(){
+  const nav = document.getElementById("week-nav-exec");
+  if(!nav) return;
+  const mesSrc = curMesExec ? DATA.filter(d=>d.data.split("/")[1]===curMesExec) : DATA;
+  const weekKeys = [...new Set(mesSrc.map(d=>d.weekKey))].sort();
+  if(curSemanaExec && !weekKeys.includes(curSemanaExec)) curSemanaExec=null;
+  const labels = weekKeys.map((k,i)=>mondayKeyToLabel(k,i));
+  nav.innerHTML = `<div class="week-pill ${!curSemanaExec?"active":""}" onclick="selectSemanaExec(null)">Todas as semanas</div>` +
+    weekKeys.map((k,i)=>`<div class="week-pill ${k===curSemanaExec?"active":""}" onclick="selectSemanaExec('${k}')">${labels[i]}</div>`).join("");
+}
+function selectSemanaExec(k){ curSemanaExec=k; buildExec(); }
 
 const META_OCUPACAO_EXEC = 0.85;
 function statusExec(occ){
@@ -2312,7 +2326,8 @@ function toggleSpecDropdownExec(){
   if(!isOpen) document.getElementById("spec-search-input-exec").focus();
 }
 function _execFilteredBase(){
-  const src = curMesExec ? DATA.filter(d=>d.data.split("/")[1]===curMesExec) : DATA;
+  let src = curMesExec ? DATA.filter(d=>d.data.split("/")[1]===curMesExec) : DATA;
+  if(curSemanaExec) src = src.filter(d=>d.weekKey===curSemanaExec);
   const fu = document.getElementById("filter-unid-exec")?.value || "";
   const ft = (document.getElementById("search-turma-exec")?.value || "").toLowerCase();
   return src.filter(d=>(!fu||d.unidade===fu) && (!ft||d.turma.toLowerCase().includes(ft)));
@@ -2394,6 +2409,7 @@ function buildExec(){
   const kpiEl=document.getElementById("kpi-exec");
   if(!tbody||!kpiEl) return;
   initMesExecDropdown();
+  buildExecWeekNav();
   rebuildSpecDropdownExec();
   let src = _execFilteredBase();
   if(window._selectedSpecsExec.size>0) src = src.filter(d=>window._selectedSpecsExec.has(getSpec(d.turma)));
