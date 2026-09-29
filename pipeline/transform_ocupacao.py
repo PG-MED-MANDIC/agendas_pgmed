@@ -42,6 +42,11 @@ ALIASES: dict[str, list[str]] = {
     # Não é um campo de saída -- só serve de referência posicional pro
     # fallback de "agendamentos" abaixo (ver _find_agendamentos_col()).
     "ocupacao": ["ocupacao"],
+    # Só usados por build_pagas() no modo de exceção (ver
+    # _build_pagas_sheet) -- abas sem nenhuma marcação em "É paga?"
+    # (Out./Nov., decisão de 2026-09-29).
+    "receita_esperada": ["receita esperada"],
+    "valor_agendado": ["valor agendado"],
 }
 
 # Campos sem os quais uma aba não pode ser processada -- se algum estiver
@@ -246,7 +251,19 @@ def build_pagas(
     dado, não só Setembro. Meses sem a coluna "É paga?" (Mai./Jun.) ou sem
     nenhuma turma paga ficam de fora do dict. `attendance` (opcional, ver
     build_raw) substitui "Agendamentos" pelo número real de comparecimentos
-    cruzado com a ConsultaJá, mesmo critério usado no RAW."""
+    cruzado com a ConsultaJá, mesmo critério usado no RAW.
+
+    MODO EXCEÇÃO (decisão do usuário, 2026-09-29): a partir de Out., a
+    planilha parou de preencher "É paga?" (coluna existe, mas vem sempre
+    vazia) e também não tem mais "Valor total". Pra abas nesse estado, em
+    vez de pular o mês inteiro, considera paga qualquer turma cuja
+    disciplina não seja "Pediatria" (comparação por prefixo, sem acento --
+    não pega "Neuropediatria", que é uma disciplina diferente e continua
+    contando como paga). Como não existe "Valor total" nessas abas, os
+    valores em R$ vêm de "Receita esperada" e "Valor agendado" (campos
+    `receita_esperada`/`valor_agendado` no dict de cada turma, com
+    `valor`/`valor60` ficando `None`) -- ver buildPagas() em index.html pra
+    como a página decide qual conjunto de campos exibir."""
     if warnings is None:
         warnings = []
 
@@ -264,6 +281,16 @@ def build_pagas(
                 data[mm] = turmas
 
     return data
+
+
+def _tem_marcacao_paga(raw: pd.DataFrame, header_row: int, col_epaga: int) -> bool:
+    """True se alguma linha da aba tem "É paga?" == "Sim". Usado pra
+    distinguir "coluna vazia porque ninguém preencheu ainda" (Out./Nov.) de
+    "coluna preenchida, essa turma só não é paga" (Mai.-Set.)."""
+    for i in range(header_row + 1, len(raw)):
+        if _norm(str(raw.iat[i, col_epaga] or "")) == "sim":
+            return True
+    return False
 
 
 def _build_pagas_sheet(
@@ -290,10 +317,32 @@ def _build_pagas_sheet(
     col_st = _find_col(headers_norm, ALIASES["slots_totais"])
     col_ag = _find_col(headers_norm, ALIASES["agendamentos"])
     col_data = _find_col(headers_norm, ALIASES["data"])
-    col_epaga, col_valor = _find_pagas_cols(headers_norm, sheet, warnings)
+    col_epaga = _find_col(headers_norm, ["e paga"])
 
     if col_turma < 0 or col_epaga < 0:
-        return []  # aba sem coluna "É paga?" (ex.: Mai./Jun.) -- sem dado de turmas pagas
+        return []  # aba sem coluna "É paga?" (ex.: Mai./Jun. em versões antigas) -- sem dado de turmas pagas
+
+    # Modo exceção só entra quando a aba realmente tem a cara do layout novo
+    # (colunas "Receita esperada"/"Valor agendado" pelo nome) E ninguém
+    # marcou nenhum "Sim" ainda -- isso evita pegar abas antigas tipo "Mai."
+    # que também não têm nenhum "Sim" mas por um motivo totalmente diferente
+    # (nunca tiveram conceito de turma paga) e não têm essas colunas.
+    col_receita = _find_col(headers_norm, ALIASES["receita_esperada"])
+    col_valorag = _find_col(headers_norm, ALIASES["valor_agendado"])
+    modo_excecao = (
+        col_receita >= 0 and col_valorag >= 0 and not _tem_marcacao_paga(raw, header_row, col_epaga)
+    )
+
+    if modo_excecao:
+        col_valor = -1
+        warnings.append(
+            f'Aba "{sheet}": coluna "É paga?" sem nenhum "Sim" -- usando regra manual '
+            '(todas as disciplinas contam como pagas, exceto Pediatria).'
+        )
+    else:
+        col_epaga, col_valor = _find_pagas_cols(headers_norm, sheet, warnings)
+        if col_epaga < 0:
+            return []
 
     def _cell(r: list, idx: int):
         return r[idx] if 0 <= idx < len(r) else None
@@ -305,14 +354,22 @@ def _build_pagas_sheet(
         turma = str(_cell(r, col_turma) or "").strip()
         if _norm(turma) in TURMAS_IGNORADAS:
             continue
-        if _norm(str(_cell(r, col_epaga) or "")) != "sim":
+        if modo_excecao:
+            is_paga = not _norm(turma).startswith("pediatria")
+        else:
+            is_paga = _norm(str(_cell(r, col_epaga) or "")) == "sim"
+        if not is_paga:
             continue
 
         d = por_turma.setdefault(turma, {
             "turma": turma,
             "unidade": str(_cell(r, col_unidade) or "").strip(),
             "modulos": [],
-            "sp": 0, "se": 0, "st": 0, "ag": 0, "n": 0, "valor": 0,
+            "sp": 0, "se": 0, "st": 0, "ag": 0, "n": 0,
+            "valor": None if modo_excecao else 0,
+            "valor60": None,
+            "receita_esperada": 0 if modo_excecao else None,
+            "valor_agendado": 0 if modo_excecao else None,
         })
         if turma not in ordem:
             ordem.append(turma)
@@ -330,9 +387,14 @@ def _build_pagas_sheet(
         d["st"] += _to_int(_cell(r, col_st))
         d["ag"] += row_ag
         d["n"] += 1
-        d["valor"] += _to_int(_cell(r, col_valor))
+        if modo_excecao:
+            d["receita_esperada"] += _to_int(_cell(r, col_receita)) if col_receita >= 0 else 0
+            d["valor_agendado"] += _to_int(_cell(r, col_valorag)) if col_valorag >= 0 else 0
+        else:
+            d["valor"] += _to_int(_cell(r, col_valor))
 
     for turma in ordem:
-        por_turma[turma]["valor60"] = round(por_turma[turma]["valor"] * 0.6)
+        if por_turma[turma]["valor"] is not None:
+            por_turma[turma]["valor60"] = round(por_turma[turma]["valor"] * 0.6)
 
     return [por_turma[t] for t in ordem]

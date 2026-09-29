@@ -133,6 +133,29 @@ coluna "Valor total" virou um número solto ou ficou vazia -- visto em
 Jul./Ago./Mai./Jun.), `_find_pagas_cols()` cai pro fallback posicional
 (coluna logo após "É paga?") nesses casos, com aviso no relatório.
 
+## Exceção "É paga?" vazia -- regra por disciplina (decisão de 2026-09-29)
+
+A partir da aba "Ocupação - Out.", a planilha passou a não preencher mais a
+coluna **"É paga?"** (fica sempre vazia) e também não tem mais a coluna
+**"Valor total"**. Pra essas abas (detectado automaticamente: nenhuma linha
+com "Sim" em "É paga?"), `build_pagas` usa uma regra manual, por decisão do
+usuário: **toda disciplina conta como paga, exceto Pediatria** (comparação
+por prefixo do nome da turma, ex. "Pediatria CPS T05" -- **não** pega
+"Neuropediatria", que é uma disciplina diferente e continua contando como
+paga).
+
+Como não existe mais "Valor total" nessas abas, os valores em R$ vêm de
+duas colunas diferentes, mostradas separadamente na página (não misturadas
+com "Receita 100%/60%" dos meses antigos):
+- **Receita esperada**: soma da coluna "Receita esperada" de cada prática da
+  turma.
+- **Valor agendado**: soma da coluna "Valor agendado" de cada prática da
+  turma.
+
+`index.html` (`buildPagas()`) detecta o mês nesse modo (turma com
+`valor == null`) e troca as colunas/KPIs de "Receita 100%/60%" por
+"Receita Esperada"/"Valor Agendado" automaticamente, só para esses meses.
+
 ## O que o pipeline garante
 
 - **Sem dado de aluno**: a planilha de origem já é agregada por
