@@ -1839,7 +1839,7 @@
         <thead><tr>
           <th class="left">Turma</th><th>Unid.</th><th class="left">Módulo</th>
           <th>Práticas</th><th>Slots Prática</th><th>Slots Totais</th><th>Agendamentos</th>
-          <th>Ocupação</th><th>Ocup. Overbooking</th><th id="th-pagas-v1">Receita 100%</th><th id="th-pagas-v2">Receita 60%</th>
+          <th>Ocupação</th><th>Ocup. Overbooking</th><th id="th-pagas-v1">Receita 100%</th><th id="th-pagas-v2">Receita 60%</th><th id="th-pagas-v3" style="display:none">A Cobrar</th>
         </tr></thead>
         <tbody id="tbl-pagas-body"></tbody>
         <tfoot><tr id="tbl-pagas-foot"></tr></tfoot>
@@ -2132,18 +2132,20 @@ function buildPagas(){
   // pelo primeiro registro (é tudo-ou-nada por aba/mês).
   const modoExcecao = PAGAS_MES.length>0 && PAGAS_MES[0].valor==null;
   document.getElementById("pagas-legenda").innerHTML = modoExcecao
-    ? 'Turmas de dermatologia com práticas pagas (extracurriculares) na competência selecionada. A partir deste mês a planilha não preenche mais "É paga?" nem "Valor total" -- considerando <b>paga toda disciplina, exceto Pediatria</b> (decisão de 29/09/2026). <b>Receita Esperada</b> e <b>Valor Agendado</b> vêm das colunas de mesmo nome da planilha.'
+    ? 'Turmas de dermatologia com práticas pagas (extracurriculares) na competência selecionada. A partir deste mês a planilha não preenche mais "É paga?" nem "Valor total" -- considerando <b>paga toda disciplina, exceto Pediatria</b> (decisão de 29/09/2026). <b>Receita Esperada</b>, <b>Valor Agendado</b> e <b>A Cobrar</b> (comparecimentos × preço; só existe após a data da prática) vêm das colunas de mesmo nome da planilha, linha a linha, sem recálculo.'
     : 'Turmas de dermatologia com práticas pagas (extracurriculares) na competência selecionada. <b>Receita 100%</b> = potencial cheio informado na planilha (coluna "Valor total"); <b>Receita 60%</b> = cenário conservador (60%).';
   document.getElementById("th-pagas-v1").textContent = modoExcecao ? "Receita Esperada" : "Receita 100%";
   document.getElementById("th-pagas-v2").textContent = modoExcecao ? "Valor Agendado" : "Receita 60%";
+  document.getElementById("th-pagas-v3").style.display = modoExcecao ? "" : "none";
   const total = PAGAS_MES.reduce((a,d)=>({
     sp:a.sp+d.sp, st:a.st+d.st, ag:a.ag+d.ag, n:a.n+d.n,
     valor:a.valor+(d.valor||0), valor60:a.valor60+(d.valor60||0),
-    receitaEsperada:a.receitaEsperada+(d.receita_esperada||0), valorAgendado:a.valorAgendado+(d.valor_agendado||0),
-  }),{sp:0,st:0,ag:0,n:0,valor:0,valor60:0,receitaEsperada:0,valorAgendado:0});
+    receitaEsperada:a.receitaEsperada+(d.receita_esperada||0), valorAgendado:a.valorAgendado+(d.valor_agendado||0), aCobrar:a.aCobrar+(d.a_cobrar||0),
+  }),{sp:0,st:0,ag:0,n:0,valor:0,valor60:0,receitaEsperada:0,valorAgendado:0,aCobrar:0});
   const kpisValor = modoExcecao ? `
     <div class="kpi green"><div class="label">Receita Esperada</div><div class="value">${fmtBRL(total.receitaEsperada)}</div><div class="sub">${total.n} práticas · exceto Pediatria</div></div>
     <div class="kpi orange"><div class="label">Valor Agendado</div><div class="value">${fmtBRL(total.valorAgendado)}</div><div class="sub">já efetivamente agendado</div></div>
+    <div class="kpi"><div class="label">A Cobrar</div><div class="value">${fmtBRL(total.aCobrar)}</div><div class="sub">comparecimentos × preço · só após a prática</div></div>
   ` : `
     <div class="kpi green"><div class="label">Receita 100%</div><div class="value">${fmtBRL(total.valor)}</div><div class="sub">${total.n} práticas · potencial cheio</div></div>
     <div class="kpi orange"><div class="label">Receita 60%</div><div class="value">${fmtBRL(total.valor60)}</div><div class="sub">cenário conservador</div></div>
@@ -2157,18 +2159,18 @@ function buildPagas(){
   `;
   const byU = {};
   PAGAS_MES.forEach(d=>{
-    if(!byU[d.unidade]) byU[d.unidade]={sp:0,st:0,ag:0,n:0,turmas:0,valor:0,valor60:0,receitaEsperada:0,valorAgendado:0};
+    if(!byU[d.unidade]) byU[d.unidade]={sp:0,st:0,ag:0,n:0,turmas:0,valor:0,valor60:0,receitaEsperada:0,valorAgendado:0,aCobrar:0};
     const u=byU[d.unidade];
     u.sp+=d.sp; u.st+=d.st; u.ag+=d.ag; u.n+=d.n; u.turmas+=1;
     u.valor+=(d.valor||0); u.valor60+=(d.valor60||0);
-    u.receitaEsperada+=(d.receita_esperada||0); u.valorAgendado+=(d.valor_agendado||0);
+    u.receitaEsperada+=(d.receita_esperada||0); u.valorAgendado+=(d.valor_agendado||0); u.aCobrar+=(d.a_cobrar||0);
   });
   const uColors={CPS:"#1A2459",SP:"#375623",ONL:"#7F6000",BSB:"#843C0C"};
   document.getElementById("kpi-pagas-unidade").innerHTML = Object.keys(byU).map(u=>{
     const d=byU[u];
     const valorPrincipal = modoExcecao ? d.receitaEsperada : d.valor;
     const sub = modoExcecao
-      ? `${d.turmas} turmas · ${pct(d.ag,d.sp)} ocupação · agendado: ${fmtBRL(d.valorAgendado)}`
+      ? `${d.turmas} turmas · ${pct(d.ag,d.sp)} ocupação · agendado: ${fmtBRL(d.valorAgendado)} · a cobrar: ${fmtBRL(d.aCobrar)}`
       : `${d.turmas} turmas · ${pct(d.ag,d.sp)} ocupação · 60%: ${fmtBRL(d.valor60)}`;
     return `<div class="kpi" style="border-left-color:${uColors[u]||'#999'}">
       <div class="label">${u}</div>
@@ -2195,6 +2197,7 @@ function buildPagas(){
       <td>${pct(d.ag,d.st)}</td>
       <td style="font-weight:bold">${fmtBRL(v1)}</td>
       <td style="color:#843C0C">${fmtBRL(v2)}</td>
+      <td style="color:#375623;display:${modoExcecao?'':'none'}">${fmtBRL(d.a_cobrar||0)}</td>
     </tr>`;
   }).join("");
   const totalV1 = modoExcecao ? total.receitaEsperada : total.valor;
@@ -2205,6 +2208,7 @@ function buildPagas(){
     <td style="font-weight:bold">${pct(total.ag,total.sp)}</td><td>${pct(total.ag,total.st)}</td>
     <td style="font-weight:bold">${fmtBRL(totalV1)}</td>
     <td style="font-weight:bold;color:#843C0C">${fmtBRL(totalV2)}</td>
+    <td style="font-weight:bold;color:#375623;display:${modoExcecao?'':'none'}">${fmtBRL(total.aCobrar)}</td>
   `;
   simInit();
 }

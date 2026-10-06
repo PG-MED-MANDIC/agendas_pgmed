@@ -47,6 +47,7 @@ ALIASES: dict[str, list[str]] = {
     # (Out./Nov., decisão de 2026-09-29).
     "receita_esperada": ["receita esperada"],
     "valor_agendado": ["valor agendado"],
+    "a_cobrar": ["a cobrar"],
 }
 
 # Campos sem os quais uma aba não pode ser processada -- se algum estiver
@@ -329,6 +330,7 @@ def _build_pagas_sheet(
     # (nunca tiveram conceito de turma paga) e não têm essas colunas.
     col_receita = _find_col(headers_norm, ALIASES["receita_esperada"])
     col_valorag = _find_col(headers_norm, ALIASES["valor_agendado"])
+    col_acobrar = _find_col(headers_norm, ALIASES["a_cobrar"])
     modo_excecao = (
         col_receita >= 0 and col_valorag >= 0 and not _tem_marcacao_paga(raw, header_row, col_epaga)
     )
@@ -370,6 +372,7 @@ def _build_pagas_sheet(
             "valor60": None,
             "receita_esperada": 0 if modo_excecao else None,
             "valor_agendado": 0 if modo_excecao else None,
+            "a_cobrar": 0 if modo_excecao else None,
         })
         if turma not in ordem:
             ordem.append(turma)
@@ -390,6 +393,7 @@ def _build_pagas_sheet(
         if modo_excecao:
             d["receita_esperada"] += _to_int(_cell(r, col_receita)) if col_receita >= 0 else 0
             d["valor_agendado"] += _to_int(_cell(r, col_valorag)) if col_valorag >= 0 else 0
+            d["a_cobrar"] += _to_int(_cell(r, col_acobrar)) if col_acobrar >= 0 else 0
         else:
             d["valor"] += _to_int(_cell(r, col_valor))
 
