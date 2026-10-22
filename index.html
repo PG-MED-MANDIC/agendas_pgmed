@@ -2132,28 +2132,37 @@ document.addEventListener("click", function(e){
 
 // ─── MACRO: filtro de módulos (multi-seleção, agrupado por especialidade) ───
 // Módulo identificado pelo nome sem o "M#" (a numeração muda de turma para turma);
-// a chave inclui a especialidade para não misturar módulos de mesmo nome em cursos diferentes.
+// a chave inclui a especialidade para não misturar módulos de mesmo nome em cursos diferentes
+// e ignora maiúsculas/acentos ("Obesidade e síndrome metabólica" = "Obesidade e Síndrome Metabólica");
+// o rótulo exibido é a grafia mais frequente.
 let curModsMacro = [];
+let modLabelsMacro = {};
 function macroModName(d){ return (d.modulo||"").replace(/^M\d+\s*-\s*/,"").replace(/\s+/g," ").trim(); }
-function macroModKey(d){ return macroSpecKey(d)+"||"+macroModName(d); }
+function macroModFold(n){ return n.normalize("NFKD").replace(/[̀-ͯ]/g,"").toLowerCase(); }
+function macroModKey(d){ return macroSpecKey(d)+"||"+macroModFold(macroModName(d)); }
 function _escH(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
 function rebuildModMacro(){
   const groups = {};
   getDMacro("mod").forEach(d=>{
     const n = macroModName(d); if(!n) return;
-    const s = macroSpecKey(d);
-    (groups[s] = groups[s] || new Set()).add(n);
+    const s = macroSpecKey(d), f = macroModFold(n);
+    const g = (groups[s] = groups[s] || new Map());
+    const e = g.get(f) || {}; e[n] = (e[n]||0)+1; g.set(f, e); // grafias do mesmo módulo -> contagem
   });
   const specs = Object.keys(groups).sort((a,b)=>a.localeCompare(b,"pt-BR"));
-  const valid = new Set(); specs.forEach(s=>groups[s].forEach(n=>valid.add(s+"||"+n)));
+  modLabelsMacro = {};
+  const valid = new Set();
+  specs.forEach(s=>groups[s].forEach((e,f)=>{
+    modLabelsMacro[s+"||"+f] = Object.keys(e).sort((a,b)=>e[b]-e[a]||a.localeCompare(b,"pt-BR"))[0];
+    valid.add(s+"||"+f);
+  }));
   curModsMacro = curModsMacro.filter(k=>valid.has(k));
   const box = document.getElementById("filter-mod-macro-list");
   if(!box) return;
   const checked = new Set(curModsMacro);
   box.innerHTML = specs.length ? specs.map(s=>
     `<div class="mmod-group"><div style="font-size:11px;font-weight:bold;color:#375623;margin:8px 0 2px">${_escH(s)}</div>`
-    + [...groups[s]].sort((a,b)=>a.localeCompare(b,"pt-BR")).map(n=>{
-        const k = s+"||"+n;
+    + [...groups[s].keys()].map(f=>({k:s+"||"+f, n:modLabelsMacro[s+"||"+f]})).sort((a,b)=>a.n.localeCompare(b.n,"pt-BR")).map(({k,n})=>{
         return `<label class="mmod-item" style="display:flex;align-items:flex-start;gap:6px;padding:2px 0;font-size:12px;cursor:pointer;color:#1A2459;line-height:1.3"><input type="checkbox" value="${_escH(k)}" onchange="onModMacroChange()" ${checked.has(k)?"checked":""} style="margin-top:2px;flex-shrink:0"><span>${_escH(n)}</span></label>`;
       }).join("")
     + `</div>`).join("")
@@ -2188,7 +2197,7 @@ function updateModMacroLabel(){
   const btn = document.getElementById("filter-mod-macro-btn");
   if(!label) return;
   const n = curModsMacro.length;
-  label.textContent = n===0 ? "Todos" : (n===1 ? curModsMacro[0].split("||")[1] : n+" selecionados");
+  label.textContent = n===0 ? "Todos" : (n===1 ? (modLabelsMacro[curModsMacro[0]] || curModsMacro[0].split("||")[1]) : n+" selecionados");
   if(btn){ btn.style.borderColor = n>0 ? "#375623" : "#ccc"; btn.style.fontWeight = n>0 ? "bold" : "normal"; }
 }
 function toggleModMacroDropdown(e){
