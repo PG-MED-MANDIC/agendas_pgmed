@@ -168,7 +168,7 @@
 <!-- ═══════════════ MACRO ═══════════════ -->
 <div id="page-macro" class="page">
 
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+  <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
     <label style="font-size:12px;font-weight:bold;color:#1A2459">Mês:</label>
     <div id="filter-mes-macro-wrap" style="position:relative">
       <button type="button" id="filter-mes-macro-btn" onclick="toggleMesMacroDropdown(event)" style="padding:5px 10px;border:1px solid #ccc;border-radius:5px;font-size:12px;background:#fff;cursor:pointer;min-width:150px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#1A2459">
@@ -181,6 +181,29 @@
       <option value="">Todas</option>
       <option>CPS</option><option>SP</option><option>ONL</option><option>BSB</option>
     </select>
+    <label style="font-size:12px;font-weight:bold;color:#1A2459;margin-left:12px">Especialidade:</label>
+    <div id="filter-spec-macro-wrap" style="position:relative">
+      <button type="button" id="filter-spec-macro-btn" onclick="toggleSpecMacroDropdown(event)" style="padding:5px 10px;border:1px solid #ccc;border-radius:5px;font-size:12px;background:#fff;cursor:pointer;min-width:190px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#1A2459">
+        <span id="filter-spec-macro-label" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Todas</span><span style="font-size:9px;color:#888">▼</span>
+      </button>
+      <div id="filter-spec-macro-panel" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:30;background:#fff;border:1px solid #ccc;border-radius:5px;padding:8px 12px;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:300px;max-height:340px;overflow-y:auto">
+        <div id="filter-spec-macro-list"></div>
+        <button type="button" onclick="clearSpecMacro()" style="margin-top:6px;padding:4px 10px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;font-size:11px;cursor:pointer">Limpar</button>
+      </div>
+    </div>
+    <label style="font-size:12px;font-weight:bold;color:#1A2459;margin-left:12px">Módulo:</label>
+    <div id="filter-mod-macro-wrap" style="position:relative">
+      <button type="button" id="filter-mod-macro-btn" onclick="toggleModMacroDropdown(event)" style="padding:5px 10px;border:1px solid #ccc;border-radius:5px;font-size:12px;background:#fff;cursor:pointer;min-width:170px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#1A2459">
+        <span id="filter-mod-macro-label" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Todos</span><span style="font-size:9px;color:#888">▼</span>
+      </button>
+      <div id="filter-mod-macro-panel" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:30;background:#fff;border:1px solid #ccc;border-radius:5px;padding:8px 12px;box-shadow:0 4px 12px rgba(0,0,0,.15);width:420px;max-width:90vw;max-height:380px;overflow-y:auto">
+        <div style="display:flex;gap:6px;align-items:center;position:sticky;top:-8px;background:#fff;padding:2px 0 4px">
+          <input id="filter-mod-macro-search" type="text" placeholder="Buscar módulo…" oninput="filterModMacroSearch()" style="flex:1;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:11px">
+          <button type="button" onclick="clearModMacro()" style="padding:4px 10px;border:1px solid #ccc;border-radius:4px;background:#f5f5f5;font-size:11px;cursor:pointer">Limpar</button>
+        </div>
+        <div id="filter-mod-macro-list"></div>
+      </div>
+    </div>
   </div>
   <div class="kpi-row" id="kpi-macro">
     <div class="kpi"><div class="label">Slots da Prática</div><div class="value">3.280</div><div class="sub">159 práticas com slots</div></div>
@@ -1978,7 +2001,7 @@ function getD(){
   const validKeys=new Set(primary.map(d=>d.weekKey));
   return DATA.filter(d=>validKeys.has(d.weekKey));
 }
-function getDMacro(){
+function getDMacro(skip){ // skip: "spec" ignora especialidade+módulo; "mod" ignora só módulo
   let base;
   if(!curMesesMacro.length){
     base = DATA;
@@ -1988,9 +2011,66 @@ function getDMacro(){
     base = DATA.filter(d=>validKeys.has(d.weekKey));
   }
   if(curUnidMacro) base = base.filter(d=>d.unidade===curUnidMacro);
+  if(skip!=="spec" && curSpecsMacro.length) base = base.filter(d=>curSpecsMacro.includes(macroSpecKey(d)));
+  if(!skip && curModsMacro.length) base = base.filter(d=>curModsMacro.includes(macroModKey(d)));
   return base;
 }
 function changeUnidMacro(v){ curUnidMacro=v; buildMacro(); }
+
+// ─── MACRO: filtro de especialidades (multi-seleção) ────────────────────────
+// Chave = nome oficial da especialidade; turmas da unidade ONL viram "<especialidade> (Online)"
+// (online é a unidade ONL, não um tipo de disciplina). Alias: nome no checklist -> nome oficial.
+let curSpecsMacro = [];
+const SPEC_ALIAS = {
+  'Dermatologia One':'Dermato One',
+  'Dermatologia Cirurgica':'Dermatologia Cirúrgica',
+  'Psiquiatria Infantil':'Psiquiatria da Infância e da Juventude',
+  'Pediatria de Consultório':'Pediatria Aplicada ao Consultório', // nome que a checklist usa a partir de out/26 (SP)
+  'Ginecologia':'Ginecologia Ambulatorial',
+  'Estetica Intima':'Estética Íntima'
+};
+function macroSpecKey(d){
+  let s = getSpec(d.turma);
+  if(d.unidade==="SP" && s==="Pediatria") s = "Pediatria Aplicada ao Consultório"; // "Pediatria" de CPS é outro curso
+  s = SPEC_ALIAS[s] || s;
+  return d.unidade==="ONL" ? s+" (Online)" : s;
+}
+function rebuildSpecMacro(){
+  const list = [...new Set(getDMacro("spec").map(macroSpecKey))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+  curSpecsMacro = curSpecsMacro.filter(s=>list.includes(s));
+  const box = document.getElementById("filter-spec-macro-list");
+  if(!box) return;
+  const checked = new Set(curSpecsMacro);
+  box.innerHTML = list.length ? list.map(s=>`<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer;white-space:nowrap;color:#1A2459"><input type="checkbox" value="${s.replace(/"/g,"&quot;")}" onchange="onSpecMacroChange()" ${checked.has(s)?"checked":""}> ${s}</label>`).join("")
+    : '<div style="font-size:11px;color:#999">Nenhuma especialidade</div>';
+  updateSpecMacroLabel();
+}
+function onSpecMacroChange(){
+  const box = document.getElementById("filter-spec-macro-list");
+  if(!box) return;
+  curSpecsMacro = [...box.querySelectorAll("input[type=checkbox]:checked")].map(i=>i.value);
+  buildMacro();
+}
+function clearSpecMacro(){ curSpecsMacro = []; buildMacro(); }
+function updateSpecMacroLabel(){
+  const label = document.getElementById("filter-spec-macro-label");
+  const btn = document.getElementById("filter-spec-macro-btn");
+  if(!label) return;
+  const n = curSpecsMacro.length;
+  label.textContent = n===0 ? "Todas" : (n<=2 ? curSpecsMacro.join(", ") : n+" selecionadas");
+  if(btn){ btn.style.borderColor = n>0 ? "#375623" : "#ccc"; btn.style.fontWeight = n>0 ? "bold" : "normal"; }
+}
+function toggleSpecMacroDropdown(e){
+  if(e) e.stopPropagation();
+  const panel = document.getElementById("filter-spec-macro-panel");
+  if(!panel) return;
+  panel.style.display = panel.style.display==="block" ? "none" : "block";
+}
+document.addEventListener("click", function(e){
+  const wrap = document.getElementById("filter-spec-macro-wrap");
+  const panel = document.getElementById("filter-spec-macro-panel");
+  if(panel && panel.style.display==="block" && wrap && !wrap.contains(e.target)) panel.style.display="none";
+});
 function getMesLabel(mm){return{'01':'Jan','02':'Fev','03':'Mar','04':'Abr','05':'Mai','06':'Jun','07':'Jul','08':'Ago','09':'Set','10':'Out','11':'Nov','12':'Dez'}[mm]||mm;}
 function mondayKeyToLabel(key,idx){
   const mon=new Date(key+"T12:00:00Z");
@@ -2047,6 +2127,79 @@ function toggleMesMacroDropdown(e){
 document.addEventListener("click", function(e){
   const wrap=document.getElementById("filter-mes-macro-wrap");
   const panel=document.getElementById("filter-mes-macro-panel");
+  if(panel && panel.style.display==="block" && wrap && !wrap.contains(e.target)) panel.style.display="none";
+});
+
+// ─── MACRO: filtro de módulos (multi-seleção, agrupado por especialidade) ───
+// Módulo identificado pelo nome sem o "M#" (a numeração muda de turma para turma);
+// a chave inclui a especialidade para não misturar módulos de mesmo nome em cursos diferentes.
+let curModsMacro = [];
+function macroModName(d){ return (d.modulo||"").replace(/^M\d+\s*-\s*/,"").replace(/\s+/g," ").trim(); }
+function macroModKey(d){ return macroSpecKey(d)+"||"+macroModName(d); }
+function _escH(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+function rebuildModMacro(){
+  const groups = {};
+  getDMacro("mod").forEach(d=>{
+    const n = macroModName(d); if(!n) return;
+    const s = macroSpecKey(d);
+    (groups[s] = groups[s] || new Set()).add(n);
+  });
+  const specs = Object.keys(groups).sort((a,b)=>a.localeCompare(b,"pt-BR"));
+  const valid = new Set(); specs.forEach(s=>groups[s].forEach(n=>valid.add(s+"||"+n)));
+  curModsMacro = curModsMacro.filter(k=>valid.has(k));
+  const box = document.getElementById("filter-mod-macro-list");
+  if(!box) return;
+  const checked = new Set(curModsMacro);
+  box.innerHTML = specs.length ? specs.map(s=>
+    `<div class="mmod-group"><div style="font-size:11px;font-weight:bold;color:#375623;margin:8px 0 2px">${_escH(s)}</div>`
+    + [...groups[s]].sort((a,b)=>a.localeCompare(b,"pt-BR")).map(n=>{
+        const k = s+"||"+n;
+        return `<label class="mmod-item" style="display:flex;align-items:flex-start;gap:6px;padding:2px 0;font-size:12px;cursor:pointer;color:#1A2459;line-height:1.3"><input type="checkbox" value="${_escH(k)}" onchange="onModMacroChange()" ${checked.has(k)?"checked":""} style="margin-top:2px;flex-shrink:0"><span>${_escH(n)}</span></label>`;
+      }).join("")
+    + `</div>`).join("")
+    : '<div style="font-size:11px;color:#999">Nenhum módulo</div>';
+  filterModMacroSearch();
+  updateModMacroLabel();
+}
+function filterModMacroSearch(){
+  const inp = document.getElementById("filter-mod-macro-search");
+  const qq = ((inp && inp.value) || "").toLowerCase();
+  const box = document.getElementById("filter-mod-macro-list");
+  if(!box || !box.querySelectorAll) return;
+  box.querySelectorAll(".mmod-group").forEach(g=>{
+    let any = false;
+    g.querySelectorAll(".mmod-item").forEach(l=>{
+      const show = !qq || l.textContent.toLowerCase().includes(qq);
+      l.style.display = show ? "flex" : "none";
+      if(show) any = true;
+    });
+    g.style.display = any ? "block" : "none";
+  });
+}
+function onModMacroChange(){
+  const box = document.getElementById("filter-mod-macro-list");
+  if(!box) return;
+  curModsMacro = [...box.querySelectorAll("input[type=checkbox]:checked")].map(i=>i.value);
+  buildMacro();
+}
+function clearModMacro(){ curModsMacro = []; buildMacro(); }
+function updateModMacroLabel(){
+  const label = document.getElementById("filter-mod-macro-label");
+  const btn = document.getElementById("filter-mod-macro-btn");
+  if(!label) return;
+  const n = curModsMacro.length;
+  label.textContent = n===0 ? "Todos" : (n===1 ? curModsMacro[0].split("||")[1] : n+" selecionados");
+  if(btn){ btn.style.borderColor = n>0 ? "#375623" : "#ccc"; btn.style.fontWeight = n>0 ? "bold" : "normal"; }
+}
+function toggleModMacroDropdown(e){
+  if(e) e.stopPropagation();
+  const panel = document.getElementById("filter-mod-macro-panel");
+  if(!panel) return;
+  panel.style.display = panel.style.display==="block" ? "none" : "block";
+}
+document.addEventListener("click", function(e){
+  const wrap = document.getElementById("filter-mod-macro-wrap");
+  const panel = document.getElementById("filter-mod-macro-panel");
   if(panel && panel.style.display==="block" && wrap && !wrap.contains(e.target)) panel.style.display="none";
 });
 
@@ -2561,6 +2714,8 @@ function showPage(name,el){
 
 // ─── MACRO ───────────────────────────────────────────────────────────────────
 function buildMacro(){
+  rebuildSpecMacro(); // lista de especialidades acompanha unidade/mês; remove seleção que não existe mais
+  rebuildModMacro();  // lista de módulos acompanha unidade/mês/especialidades
   const _D=getDMacro();const total = _D.reduce((a,d)=>({sp:a.sp+d.sp,se:a.se+d.se,st:a.st+d.st,ag:a.ag+d.ag}),{sp:0,se:0,st:0,ag:0});
   const withSlots = _D.filter(d=>d.sp>0).length;
   const noSlots = _D.filter(d=>d.sp===0).length;
