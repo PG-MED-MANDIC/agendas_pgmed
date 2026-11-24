@@ -12,8 +12,9 @@ slots totais = total do RDS (regulares + buffer + extras, ja com a regra
 temporaria). Receita esperada = ticket medio x slots totais (como o RDS calcula),
 recalculada quando a regra muda o total; valor agendado e a cobrar vem do RDS.
 
-"E paga?" (decisao do usuario, 23/11/2026): TODAS pagas, exceto Neuropediatria
-(vale para Out./Nov./Dez.; Set. e antes seguem as marcacoes da planilha).
+"E paga?" (mantida em 24/11/2026): TODAS pagas, exceto "Pediatria" (mesma regra de 29/09/2026;
+comparacao por prefixo, nao pega Neuropediatria). PENDENCIA: usuario vai confirmar se a excecao deve incluir
+Neuropediatria/Psicopediatria. Vale para Out./Nov./Dez.; Set. e antes seguem as marcacoes da planilha).
 """
 from __future__ import annotations
 
@@ -86,7 +87,8 @@ def mesclar_raw(rows_xlsx: list[list], rds: dict, ini: datetime, attendance, war
 
 
 def pagas_rds(rds: dict, fim_planilha: datetime, attendance, warnings: list[str]) -> dict[str, list[dict]]:
-    """Turmas pagas (Out./Nov./Dez.) a partir do RDS: todas, exceto Neuropediatria."""
+    """Turmas pagas (Out./Nov./Dez.) a partir do RDS: todas, exceto Pediatria (regra de 29/09/2026,
+    mantida pelo usuario em 24/11/2026; pendencia: confirmar se Neuropediatria/Psicopediatria tambem)."""
     data: dict[str, dict[str, dict]] = {}
     warned: set[str] = set()
     for (turma, dstr), p in sorted(rds.items(), key=lambda kv: (_dt(kv[0][1]), kv[0][0])):
@@ -94,7 +96,7 @@ def pagas_rds(rds: dict, fim_planilha: datetime, attendance, warnings: list[str]
         mm = f"{d.month:02d}"
         if mm not in MESES_PAGAS_RDS or d.year != 2026 or d > fim_planilha:
             continue
-        if _norm(turma).startswith("neuropediatria"):
+        if _norm(turma).startswith("pediatria"):
             continue
         t = data.setdefault(mm, {}).setdefault(turma, {
             "turma": turma, "unidade": p["unidade"], "modulos": [], "sp": 0, "se": 0, "st": 0, "ag": 0, "n": 0,

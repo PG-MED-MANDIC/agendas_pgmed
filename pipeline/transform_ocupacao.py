@@ -339,7 +339,7 @@ def _build_pagas_sheet(
         col_valor = -1
         warnings.append(
             f'Aba "{sheet}": coluna "É paga?" sem nenhum "Sim" -- usando regra manual '
-            '(todas as disciplinas contam como pagas, exceto Neuropediatria -- decisao de 23/11/2026).'
+            '(todas as disciplinas contam como pagas, exceto Pediatria).'
         )
     else:
         col_epaga, col_valor = _find_pagas_cols(headers_norm, sheet, warnings)
@@ -357,7 +357,7 @@ def _build_pagas_sheet(
         if _norm(turma) in TURMAS_IGNORADAS:
             continue
         if modo_excecao:
-            is_paga = not _norm(turma).startswith("neuropediatria")
+            is_paga = not _norm(turma).startswith("pediatria")
         else:
             is_paga = _norm(str(_cell(r, col_epaga) or "")) == "sim"
         if not is_paga:
