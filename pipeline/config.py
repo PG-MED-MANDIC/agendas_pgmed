@@ -28,3 +28,8 @@ DADOS_FONTE_DIR = PROJECT_DIR.parent / "dados-fonte"
 # nova versão baixada substitui a anterior.
 XLSX_FILENAME = "checklist-captacao.xlsx"
 XLSX_PATH = DADOS_FONTE_DIR / XLSX_FILENAME
+
+# Slots reais do RDS do Raul (gerado por automacao-dashboard/atualizar_checklist_rds.py) e as regras
+# temporarias de Campinas/Brasilia, que moram no pipeline do agendas-pac-real.
+CHECKLIST_REAL_PATH = DADOS_FONTE_DIR / "checklist_real.json"
+AGENDAS_PAC_REAL_PIPELINE_DIR = PROJECT_DIR.parent / "agendas-pac-real" / "pipeline"

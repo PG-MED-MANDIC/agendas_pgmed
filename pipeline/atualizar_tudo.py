@@ -26,8 +26,9 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from attendance_consultaja import build_attendance, find_latest
-from config import DADOS_FONTE_DIR, INDEX_HTML_PATH, PIPELINE_DIR, XLSX_PATH
+from config import CHECKLIST_REAL_PATH, DADOS_FONTE_DIR, INDEX_HTML_PATH, PIPELINE_DIR, XLSX_PATH
 from render_index import upsert_last_update, upsert_pagas, upsert_raw
+from fonte_rds import _dt, carregar_rds, mesclar_raw, pagas_rds
 from transform_ocupacao import build_pagas, build_raw
 
 # Desde a migração pro GitHub Actions (2026-09-21), o runner roda em UTC --
@@ -75,9 +76,19 @@ def main() -> int:
             report.append(f"  Cruzando Agendamentos com {consultaja_path.name} (pacientes agendados, exceto cancelados).")
 
         rows = build_raw(XLSX_PATH, warnings=warnings, attendance=attendance)
-        upsert_raw(INDEX_HTML_PATH, rows)
-
         pagas = build_pagas(XLSX_PATH, warnings=warnings, attendance=attendance)
+
+        # Fonte RDS (slots do Raul + regras temporarias CPS/BSB). Sem o json, segue so com a planilha.
+        if CHECKLIST_REAL_PATH.exists():
+            from datetime import datetime as _dtm
+            rds = carregar_rds(CHECKLIST_REAL_PATH, warnings)
+            fim_xlsx = max(_dt(r[3]) for r in rows)
+            rows = mesclar_raw(rows, rds, _dtm(2026, 9, 1), attendance, warnings)
+            pagas.update(pagas_rds(rds, fim_xlsx, attendance, warnings))
+        else:
+            warnings.append("checklist_real.json nao encontrado -- slots vieram so da planilha checklist-captacao.")
+
+        upsert_raw(INDEX_HTML_PATH, rows)
         upsert_pagas(INDEX_HTML_PATH, pagas)
 
         upsert_last_update(INDEX_HTML_PATH, f"{datetime.now(FUSO_BR):%d/%m/%Y %H:%M}")
