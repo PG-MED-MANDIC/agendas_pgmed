@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from config import AGENDAS_PAC_REAL_PIPELINE_DIR
@@ -83,6 +83,14 @@ def mesclar_raw(rows_xlsx: list[list], rds: dict, ini: datetime, attendance, war
         f"RDS: {len(novas)} praticas do RDS (de {ini:%d/%m/%Y} a {fim:%d/%m/%Y}) no lugar das da planilha; "
         f"{len(mantidas)} da planilha antes do RDS; {sem_rds} linhas da planilha sem correspondente no RDS (descartadas)."
     )
+    # AVISO combinado com o usuario (24/11/2026): a regra e temporaria e o RDS so e usado ate a ultima data da
+    # planilha. Perto desse limite, lembrar de decidir se estende (o RDS tem dados ate mar/27).
+    if date.today() >= (fim - timedelta(days=10)).date():
+        warnings.append(
+            f"AVISO: a planilha checklist-captacao termina em {fim:%d/%m/%Y}; o agendas_pgmed so mostra datas ate la "
+            "(o RDS do Raul tem praticas ate mar/2027). Se o Raul ainda NAO atualizou a regra, decidir se estende o "
+            "agendas_pgmed ate mar/27 (testar filtros de mes com 2027) ou se a planilha ganha as abas novas."
+        )
     return mantidas + sorted(novas, key=lambda r: (_dt(r[3]), r[0]))
 
 
