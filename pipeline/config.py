@@ -33,3 +33,6 @@ XLSX_PATH = DADOS_FONTE_DIR / XLSX_FILENAME
 # temporarias de Campinas/Brasilia, que moram no pipeline do agendas-pac-real.
 CHECKLIST_REAL_PATH = DADOS_FONTE_DIR / "checklist_real.json"
 AGENDAS_PAC_REAL_PIPELINE_DIR = PROJECT_DIR.parent / "agendas-pac-real" / "pipeline"
+# Interruptor: True = slots do RDS do Raul (+ regras temporarias CPS/BSB); False = volta a ler so a planilha
+# checklist-captacao.xlsx, como era antes de 24/11/2026. Ver REGRA_RDS_AGENDAS_PGMED.md.
+USAR_RDS = True
